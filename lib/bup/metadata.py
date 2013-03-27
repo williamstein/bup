@@ -196,6 +196,9 @@ class Metadata:
     # Timestamps are (sec, ns), relative to 1970-01-01 00:00:00, ns
     # must be non-negative and < 10**9.
 
+    def __str__(self):
+        return detailed_str(self)
+
     def _add_common(self, path, st):
         self.uid = st.st_uid
         self.gid = st.st_gid
