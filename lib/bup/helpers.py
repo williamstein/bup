@@ -280,12 +280,29 @@ def grp_from_name(name):
     return entry
 
 
+_getgid = None
+def getgid():
+    """Get the group id."""
+    global _getgid
+    if not _getgid:
+        _getgid = os.getgid()
+    return _getgid
+
+_getuid = None
+def getuid():
+    """Get the user id."""
+    global _getuid
+    if not _getuid:
+        _getuid = os.getuid()
+    return _getuid
+
+
 _username = None
 def username():
     """Get the user's login name."""
     global _username
     if not _username:
-        uid = os.getuid()
+        uid = getuid()
         _username = pwd_from_uid(uid)[0] or 'user%d' % uid
     return _username
 
@@ -295,7 +312,7 @@ def userfullname():
     """Get the user's full name."""
     global _userfullname
     if not _userfullname:
-        uid = os.getuid()
+        uid = getuid()
         entry = pwd_from_uid(uid)
         if entry:
             _userfullname = entry[4].split(',')[0] or entry[0]
