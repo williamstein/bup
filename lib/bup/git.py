@@ -722,12 +722,6 @@ def read_ref(refname):
         return None
 
 
-# Cache the git rev-list in a new directory called bubcache.
-REV_CACHE = os.path.join(os.environ['BUP_DIR'], 'bupcache', 'rev_list')
-if not os.path.exists(REV_CACHE):
-    os.makedirs(REV_CACHE)
-import cPickle
-
 
 def rev_list(ref, count=None):
     """Generate a list of reachable commits in reverse chronological order.
@@ -745,6 +739,11 @@ def rev_list(ref, count=None):
     # For some reason (?) bup calls rev_list on startup for *every*
     # single branch in the repository before doing "bup ls",
     # "bup restore", etc.
+    # Cache the git rev-list in a new directory called bubcache.
+    REV_CACHE = os.path.join(repodir, 'bupcache', 'rev_list')
+    if not os.path.exists(REV_CACHE):
+        os.makedirs(REV_CACHE)
+    import cPickle
     cache = os.path.join(REV_CACHE, ref)
     if os.path.exists(cache):
         v = cPickle.loads(open(cache).read())
