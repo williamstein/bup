@@ -1,3 +1,21 @@
+
+## Why this branch?
+
+This is a branch of <https://github.com/bup/bup> that is optimized for bup repositories that have a large number of branches.
+
+**Motivation:**
+
+- I was testing using bup to snapshot many projects for <https://cloud.sagemath.com>,  and the current user data set (of 500 projects) was making bup bog down so that all command line operations took at least 30 seconds (!).  After trying for a long time to find a way around this problem, I read bup's design document <https://github.com/bup/bup/blob/master/DESIGN> and could not see any reason for bup to scale this badly.  So I started profiling the Python source code and in minutes figured out that the problem was bup opening about 1000 git subprocesses to build some datastructure.  As a first little optimization, I just cached what those subprocess calls are computing to the filesystem (using pickle), and the time went from 30+ seconds to 0.5 seconds!  For a web application, this is the difference between an impossible show stopper and good-to-go.
+
+- Looking through the source code, there are many other optimizations that can be made, so that the complexity of operations isn't multiplied by the number of projects (and a constant -- the operation above just improved the constant).  For example, in `bup-ls` the line `top = vfs.RefList(None)` could have the `None` replaced by something involving the actual input `args`, which would reduce the time a huge amount.    I plan to do these optimizations later, once I'm done with getting bup integrated into <https://cloud.sagemath.com>.
+
+
+ -- William Stein (Department of Mathematics, University of Washington)
+
+
+## The BUP docs....
+
+
 bup: It backs things up
 =======================
 
@@ -12,7 +30,7 @@ just how cool it is, I wrote you this poem:
                           What rhymes with awesome?
                             I guess maybe possum
                            But that's irrelevant.
-			
+
 Hmm.  Did that help?  Maybe prose is more useful after all.
 
 
@@ -26,40 +44,40 @@ bup has a few advantages over other backup software:
    virtual machine (VM) disk images, databases, and XML files incrementally,
    even though they're typically all in one huge file, and not use tons of
    disk space for multiple versions.
-   
+
  - It uses the packfile format from git (the open source version control
    system), so you can access the stored data even if you don't like bup's
    user interface.
-   
+
  - Unlike git, it writes packfiles *directly* (instead of having a separate
    garbage collection / repacking stage) so it's fast even with gratuitously
    huge amounts of data.  bup's improved index formats also allow you to
    track far more filenames than git (millions) and keep track of far more
    objects (hundreds or thousands of gigabytes).
-   
+
  - Data is "automagically" shared between incremental backups without having
    to know which backup is based on which other one - even if the backups
    are made from two different computers that don't even know about each
    other.  You just tell bup to back stuff up, and it saves only the minimum
    amount of data needed.
-   
+
  - You can back up directly to a remote bup server, without needing tons of
    temporary disk space on the computer being backed up.  And if your backup
    is interrupted halfway through, the next run will pick up where you left
    off.  And it's easy to set up a bup server: just install bup on any
    machine where you have ssh access.
-   
+
  - Bup can use "par2" redundancy to recover corrupted backups even if your
    disk has undetected bad sectors.
-   
+
  - Even when a backup is incremental, you don't have to worry about
    restoring the full backup, then each of the incrementals in turn; an
    incremental backup *acts* as if it's a full backup, it just takes less
    disk space.
-   
+
  - You can mount your bup repository as a FUSE filesystem and access the
    content that way, and even export it over Samba.
-   
+
  - It's written in python (with some C parts to make it faster) so it's easy
    for you to extend and maintain.
 
@@ -70,15 +88,15 @@ Reasons you might want to avoid bup
  - This is a very early version. Therefore it will most probably not work
    for you, but we don't know why.  It is also missing some
    probably-critical features.
-   
+
  - It requires python >= 2.5, a C compiler, and an installed git version >=
    1.5.3.1.
- 
+
  - It currently only works on Linux, MacOS X >= 10.4,
    NetBSD, Solaris, or Windows (with Cygwin).  Patches to support
    other platforms are welcome.
-   
-   
+
+
 Getting started
 ===============
 
@@ -87,7 +105,7 @@ From source
 -----------
 
  - Check out the bup source code using git:
- 
+
         git clone git://github.com/bup/bup
 
  - Install the needed python libraries (including the development
@@ -101,7 +119,7 @@ From source
 
    Substitute python2.5-dev if you have an older system.  Alternately,
    on newer Debian/Ubuntu versions, you can try this:
-    
+
             apt-get build-dep bup
 
    On CentOS (for CentOS 6, at least), this should be sufficient (run
@@ -118,11 +136,11 @@ From source
  - Build the python module and symlinks:
 
         make
- 	
+
  - Run the tests:
- 
+
         make test
- 	
+
     (The tests should pass.  If they don't pass for you, stop here and send
     me an email.)
 
@@ -154,63 +172,63 @@ Using bup
 ---------
 
  - Try making a local backup as a tar file:
- 
+
         tar -cvf - /etc | bup split -n local-etc -vv
- 	
+
  - Try restoring your backup tarball:
- 
+
         bup join local-etc | tar -tf -
- 	
+
  - Look at how much disk space your backup took:
- 
+
         du -s ~/.bup
- 	
+
  - Make another backup (which should be mostly identical to the last one;
    notice that you don't have to *specify* that this backup is incremental,
    it just saves space automatically):
- 
+
         tar -cvf - /etc | bup split -n local-etc -vv
- 	
+
  - Look how little extra space your second backup used on top of the first:
- 
+
  	du -s ~/.bup
- 	
+
  - Restore your old backup again (the ~1 is git notation for "one older than
    the most recent"):
-   
+
         bup join local-etc~1 | tar -tf -
- 
+
  - Get a list of your previous backups:
- 
+
         GIT_DIR=~/.bup git log local-etc
-	
+
  - Make a backup on a remote server (which must already have the 'bup' command
    somewhere in the server's PATH (see /etc/profile, etc/environment,
    ~/.profile, or ~/.bashrc), and be accessible via ssh.
    Make sure to replace SERVERNAME with the actual hostname of your server):
-   
+
         tar -cvf - /etc | bup split -r SERVERNAME: -n local-etc -vv
- 
+
  - Try restoring the remote backup tarball:
- 
+
         bup join -r SERVERNAME: local-etc | tar -tf -
- 	
+
  - Try using the new (slightly experimental) 'bup index' and 'bup save'
    style backups, which bypass 'tar' but have some missing features (see
    "Things that are stupid" below):
-   	
+
         bup index -uv /etc
         bup save -n local-etc /etc
-   	
+
  - Do it again and see how fast an incremental backup can be:
- 
+
         bup index -uv /etc
         bup save -n local-etc /etc
- 	
+
     (You can also use the "-r SERVERNAME:" option to 'bup save', just like
      with 'bup split' and 'bup join'.  The index itself is always local,
      so you don't need -r there.)
- 	
+
 That's all there is to it!
 
 
@@ -315,7 +333,7 @@ id is stored in the index.  This lets 'bup save' avoid reading that file to
 produce future incremental backups, which means it can go *very* fast unless
 a lot of files have changed.
 
- 
+
 Things that are stupid for now but which we'll fix later
 --------------------------------------------------------
 
@@ -323,7 +341,7 @@ Help with any of these problems, or others, is very welcome.  Join the
 mailing list (see below) if you'd like to help.
 
  - 'bup save' and 'bup restore' have immature metadata support.
- 
+
     On the plus side, they actually do have support now, but it's new,
     and not remotely as well tested as tar/rsync/whatever's.  If you'd
     like to help test, please do (see t/compare-trees for one
@@ -353,13 +371,13 @@ mailing list (see below) if you'd like to help.
      [3] http://docs.python.org/2/reference/datamodel.html#emulating-container-types
 
  - 'bup index' is slower than it should be.
- 
+
     It's still rather fast: it can iterate through all the filenames on my
     600,000 file filesystem in a few seconds.  But it still needs to rewrite
     the entire index file just to add a single filename, which is pretty
     nasty; it should just leave the new files in a second "extra index" file
     or something.
-   
+
  - bup could use inotify for *really* efficient incremental backups.
 
     You could even have your system doing "continuous" backups: whenever a
@@ -368,45 +386,45 @@ mailing list (see below) if you'd like to help.
     you wouldn't even know it was running.
 
  - bup currently has no features that prune away *old* backups.
- 
+
     Because of the way the packfile system works, backups become "entangled"
     in weird ways and it's not actually possible to delete one pack
     (corresponding approximately to one backup) without risking screwing up
     other backups.
-   
+
     git itself has lots of ways of optimizing this sort of thing, but its
     methods aren't really applicable here; bup packfiles are just too huge.
     We'll have to do it in a totally different way.  There are lots of
     options.  For now: make sure you've got lots of disk space :)
 
  - bup has never been tested on anything but Linux, MacOS, and Windows+Cygwin.
- 
+
     There's nothing that makes it *inherently* non-portable, though, so
     that's mostly a matter of someone putting in some effort.  (For a
     "native" Windows port, the most annoying thing is the absence of ssh in
     a default Windows installation.)
-    
+
  - bup needs better documentation.
- 
+
     According to a recent article about git in Linux Weekly News
     (https://lwn.net/Articles/380983/), "it's a bit short on examples and
     a user guide would be nice."  Documentation is the sort of thing that
     will never be great unless someone from outside contributes it (since
     the developers can never remember which parts are hard to understand).
-    
+
  - bup is "relatively speedy" and has "pretty good" compression.
- 
+
     ...according to the same LWN article.  Clearly neither of those is good
-    enough.  We should have awe-inspiring speed and crazy-good compression. 
+    enough.  We should have awe-inspiring speed and crazy-good compression.
     Must work on that.  Writing more parts in C might help with the speed.
-   
+
  - bup has no GUI.
- 
-    Actually, that's not stupid, but you might consider it a limitation. 
+
+    Actually, that's not stupid, but you might consider it a limitation.
     There are a bunch of Linux GUI backup programs; someday I expect someone
     will adapt one of them to use bup.
-    
-    
+
+
 More Documentation
 ------------------
 
@@ -427,7 +445,7 @@ bup mailing list.
 You can find the mailing list archives here:
 
 	http://groups.google.com/group/bup-list
-	
+
 and you can subscribe by sending a message to:
 
 	bup-list+subscribe@googlegroups.com
