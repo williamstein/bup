@@ -1,7 +1,7 @@
 
-## Why this branch?
+## Why this fork?
 
-This is a branch of <https://github.com/bup/bup> that is optimized for bup repositories that have a large number of branches.
+This is a fork of <https://github.com/bup/bup> that is optimized for bup repositories that have a large number of branches.
 
 **Motivation:**
 
