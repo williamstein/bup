@@ -592,8 +592,11 @@ class Node:
         """
         if self._subs == None:
             self._mksubs()
-        if stat.S_ISDIR(self.mode):
-            return 2 + sum( 1 for item in self if stat.S_ISDIR(item.mode) )
+        if hasattr(self, '_nlinks_for_dir'):
+            #assert( self._nlinks_for_dir == 2 + sum( 1 for item in self if stat.S_ISDIR(item.mode) ) )
+            return self._nlinks_for_dir
+
+        #assert( not stat.S_ISDIR(self.mode) )
 
         if not use_inode_cache:
             return 1
@@ -737,6 +740,7 @@ class Dir(Node):
             it = cp().get(self.hash.encode('hex') + ':')
             type = it.next()
         assert(type == 'tree')
+        self._nlinks_for_dir = 2
         for (mode,mangled_name,sha) in git.tree_decode(''.join(it)):
             if mangled_name == '.bupm':
                 self._bupm = File(self, mangled_name, mode, sha, git.BUP_NORMAL)
@@ -747,6 +751,7 @@ class Dir(Node):
                 mode = GIT_MODE_FILE
             if stat.S_ISDIR(mode):
                 self._subs[name] = Dir(self, name, mode, sha)
+                self._nlinks_for_dir += 1
             elif stat.S_ISLNK(mode):
                 self._subs[name] = Symlink(self, name, sha, bupmode)
             else:
@@ -780,6 +785,7 @@ class CommitDir(Node):
     def _mksubs(self):
         self._subs = {}
         refs = git.list_refs()
+        self._nlinks_for_dir = 2
         for ref in refs:
             #debug2('ref name: %s\n' % ref[0])
             revs = git.rev_list(ref[1].encode('hex'))
@@ -792,6 +798,7 @@ class CommitDir(Node):
                 if not n1:
                     n1 = CommitList(self, containername)
                     self._subs[containername] = n1
+                    self._nlinks_for_dir += 1
 
                 if n1.commits.get(dirname):
                     # Stop work for this ref, the rest should already be present
@@ -808,11 +815,13 @@ class CommitList(Node):
 
     def _mksubs(self):
         self._subs = {}
+        self._nlinks_for_dir = 2
         for (name, (hash, date)) in self.commits.items():
             n1 = Dir(self, name, GIT_MODE_TREE, hash)
             n1._set_time_nsec_from_git_date(date)
             n1._commit_id = hash
             self._subs[name] = n1
+            self._nlinks_for_dir += 1
 
 
 class TagDir(Node):
@@ -822,6 +831,7 @@ class TagDir(Node):
 
     def _mksubs(self):
         self._subs = {}
+        self._nlinks_for_dir = 2
         for (name, sha) in git.list_refs():
             if name.startswith('refs/tags/'):
                 name = name[10:]
@@ -844,6 +854,7 @@ class BranchList(Node):
 
     def _mksubs(self):
         self._subs = {}
+        self._nlinks_for_dir = 2
 
         tags = git.tags()
 
@@ -886,6 +897,7 @@ class RefList(Node):
 
     def _mksubs(self):
         self._subs = {}
+        self._nlinks_for_dir = 4
 
         commit_dir = CommitDir(self, '.commit')
         self._subs['.commit'] = commit_dir
@@ -902,3 +914,4 @@ class RefList(Node):
                 n1 = BranchList(self, name, sha)
                 n1._set_time_nsec_from_git_date(date)
                 self._subs[name] = n1
+                self._nlinks_for_dir += 1
