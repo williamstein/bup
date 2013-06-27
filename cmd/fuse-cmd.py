@@ -81,6 +81,8 @@ class BupFs(fuse.Fuse):
                 st.st_mtime = _time_nsec_to_fuseStat(node.mtime_nsec_meta_default())
                 st.st_ctime = _time_nsec_to_fuseStat(node.ctime_nsec_meta_default())
                 st.st_atime = _time_nsec_to_fuseStat(node.atime_nsec_meta_default())
+                st.st_uid = node.uid_default(use_name=False)
+                st.st_gid = node.gid_default(use_name=False)
             else:
                 st.st_mode = node.mode
                 st.st_mtime = _time_nsec_to_fuseStat(node.mtime_nsec_default())
