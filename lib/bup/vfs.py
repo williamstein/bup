@@ -245,6 +245,78 @@ class Node:
         return self.mode
 
 
+    def _get_uid(self):
+        """Return the uid from metadata or None if the metadata is missing"""
+        metadata = self.metadata()
+        return getattr(metadata, 'uid', None) if metadata is not None else None
+    uid = property(_get_uid)
+
+    def _get_user(self):
+        """Return the user from metadata or None if the metadata is missing"""
+        metadata = self.metadata()
+        return getattr(metadata, 'user', None) if metadata is not None else None
+    user = property(_get_user);
+
+    def uid_default(self, use_name=False):
+        """
+        Returns the uid of the node with several fallback options.
+
+        If use_name is False, it returns the uid from the metadata or
+        the user id of the current process (if the metadata is missing)
+
+        If use_name is True, it takes metadata().user and tries to resolve the user id from
+        the user name. If that fails, it acts as if use_name is False.
+        """
+        metadata = self.metadata()
+        if metadata is not None:
+            if use_name:
+                name = getattr(metadata, 'user', None)
+                if name:
+                    entry = pwd_from_name(name)
+                    if entry:
+                        return entry.pw_uid
+            uid = getattr(metadata, 'uid', None)
+            if uid is not None:
+                return uid
+        return getuid()
+
+
+    def _get_gid(self):
+        """Returns the gid from the metadata or None if the metadata is missing"""
+        metadata = self.metadata()
+        return getattr(metadata, 'gid', None) if metadata is not None else None
+    gid = property(_get_gid)
+
+    def _get_group(self):
+        """Returns the group name from the metadata or None if the metadata is missing"""
+        metadata = self.metadata()
+        return getattr(metadata, 'group', None) if metadata is not None else None
+    group = property(_get_group);
+
+    def gid_default(self, use_name=False):
+        """
+        Returns the gid of the node with several fallback options.
+
+        If use_name is False, it returns the gid from the metadata or
+        the group id of the current process (if the metadata is missing).
+
+        If use_name is True, it takes metadata().group and tries to resolve the group id from
+        the group name. If that fails, it acts as if use_name is False.
+        """
+        metadata = self.metadata()
+        if metadata is not None:
+            if use_name:
+                name = getattr(metadata, 'group', None)
+                if name:
+                    entry = grp_from_name(name)
+                    if entry:
+                        return entry.gr_gid
+            gid = getattr(metadata, 'gid', None)
+            if gid is not None:
+                return gid
+        return getgid()
+
+
     def __repr__(self):
         return "<%s object at X - name:%r hash:%s parent:%r>" \
             % (self.__class__, self.name, self.hash.encode('hex'),
