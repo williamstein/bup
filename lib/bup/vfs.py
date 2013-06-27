@@ -230,6 +230,21 @@ class Node:
         self.atime_nsec = self.ctime_nsec = self.mtime_nsec = date * 1000000000
 
 
+    def _get_mode_meta(self):
+        """Returns the mode from the metadata, or None if the metadata is not available"""
+        metadata = self.metadata()
+        return getattr(metadata, 'mode', None) if metadata is not None else None
+    mode_meta = property(_get_mode_meta)
+    def mode_meta_default(self):
+        """ Returns the mode from the metadata (self.mode_meta) and as fallback the static mode of the node (self.meta) """
+        metadata = self.metadata()
+        if metadata is not None:
+            mode = getattr(metadata, 'mode', None)
+            if mode is not None:
+                return mode
+        return self.mode
+
+
     def __repr__(self):
         return "<%s object at X - name:%r hash:%s parent:%r>" \
             % (self.__class__, self.name, self.hash.encode('hex'),
