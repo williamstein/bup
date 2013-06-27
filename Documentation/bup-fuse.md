@@ -39,6 +39,11 @@ should unmount it with `umount`(8).
 :   permit other users to access the filesystem. Necessary for
     exporting the filesystem via Samba, for example.
 
+-m, \--no-metadata
+:   Do not load the metadata information such as times, permission and
+    user. This considerably speeds up the first access to the files.
+    By default metadata will be loaded.
+
 # EXAMPLE
 
     rm -rf /tmp/buptest
