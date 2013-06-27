@@ -74,7 +74,7 @@ class BupFs(fuse.Fuse):
         try:
             node = cache_get(self.top, path)
             st = Stat()
-            st.st_nlink = node.nlinks()
+            st.st_nlink = node.nlinks(use_inode_cache=self._use_metadata)
             st.st_size = node.size()
             if self._use_metadata:
                 st.st_mode = node.mode_meta_default()
@@ -83,6 +83,7 @@ class BupFs(fuse.Fuse):
                 st.st_atime = _time_nsec_to_fuseStat(node.atime_nsec_meta_default())
                 st.st_uid = node.uid_default(use_name=False)
                 st.st_gid = node.gid_default(use_name=False)
+                st.st_ino = node.inode
             else:
                 st.st_mode = node.mode
                 st.st_mtime = _time_nsec_to_fuseStat(node.mtime_nsec_default())
@@ -95,10 +96,16 @@ class BupFs(fuse.Fuse):
     def readdir(self, path, offset):
         log('--readdir(%r)\n' % path)
         node = cache_get(self.top, path)
-        yield fuse.Direntry('.')
-        yield fuse.Direntry('..')
-        for sub in node.subs():
-            yield fuse.Direntry(sub.name)
+        if self._use_metadata:
+            yield fuse.Direntry('.', ino=node.inode)
+            yield fuse.Direntry('..', ino=node.inode_of_parent)
+            for sub in node.subs():
+                yield fuse.Direntry(sub.name, ino=sub.inode)
+        else:
+            yield fuse.Direntry('.')
+            yield fuse.Direntry('..')
+            for sub in node.subs():
+                yield fuse.Direntry(sub.name)
 
     def readlink(self, path):
         log('--readlink(%r)\n' % path)
@@ -149,6 +156,8 @@ f = BupFs(top, opt.metadata)
 f.fuse_args.mountpoint = extra[0]
 if opt.debug:
     f.fuse_args.add('debug')
+if opt.metadata:
+    f.fuse_args.add('use_ino')
 if opt.foreground:
     f.fuse_args.setmod('foreground')
 print f.multithreaded
