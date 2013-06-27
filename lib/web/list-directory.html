@@ -24,13 +24,21 @@
             {% end %}
             <table>
                 <tr>
-                    <th class="dir-name">Name</th>
+                    <th class="dir-mode">Mode</th>
+                    <th class="dir-user">User</th>
+                    <th class="dir-group">Group</th>
                     <th class="dir-size">Size</th>
+                    <th class="dir-time">Time</th>
+                    <th class="dir-name">Name</th>
                 </tr>
-                {% for (display, link, size) in dir_contents %}
+                {% for (display, link, size, user, group, mode, time) in dir_contents %}
                 <tr>
-                    <td class="dir-name"><a href="{{ link }}">{{ display }}</a></td>
+                    <td class="dir-mode">{% if mode != None %}{{ mode }}{% else %}&nbsp;{% end %}</td>
+                    <td class="dir-user">{% if user != None %}{{ user }}{% else %}&nbsp;{% end %}</td>
+                    <td class="dir-group">{% if group != None %}{{ group }}{% else %}&nbsp;{% end %}</td>
                     <td class="dir-size">{% if size != None %}{{ size }}{% else %}&nbsp;{% end %}</td>
+                    <td class="dir-time">{% if time != None %}{{ time }}{% else %}&nbsp;{% end %}</td>
+                    <td class="dir-name"><a href="{{ link }}">{{ display }}</a></td>
                 </tr>
                 {% end %}
             </table>

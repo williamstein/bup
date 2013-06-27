@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-import sys, stat, urllib, mimetypes, posixpath, time
+import sys, stat, urllib, mimetypes, posixpath, time, datetime
 import tornado.httpserver
 import tornado.ioloop
 import tornado.web
-from bup import options, git, vfs
+from bup import options, git, vfs, xstat
 from bup.helpers import *
 
 handle_ctrl_c()
@@ -33,6 +33,32 @@ def _contains_hidden_files(n):
 
     return False
 
+def metadata_switch(fcn):
+    # decorator to enable/disable access to metadata (for testing)
+    #return lambda node: "X"
+    return fcn
+
+@metadata_switch
+def _get_group(node):
+    group = node.group
+    if group is None:
+        return "[%d]" % node.gid_default()
+    return group
+
+@metadata_switch
+def _get_user(node):
+    user = node.user
+    if user is None:
+        return "[%d]" % node.uid_default()
+    return user
+
+@metadata_switch
+def _get_time(node):
+    return datetime.datetime.fromtimestamp(node.mtime_nsec_meta_default()/10.0**9).strftime('%Y-%m-%d %H:%M:%S')
+
+@metadata_switch
+def _get_mode(node):
+    return xstat.mode_str(node.mode_meta_default())
 
 def _compute_dir_contents(n, path, show_hidden=False):
     """Given a vfs node, returns an iterator for display info of all subs."""
@@ -41,7 +67,7 @@ def _compute_dir_contents(n, path, show_hidden=False):
         url_append = "?hidden=1"
 
     if path != "/":
-        yield('..', '../' + url_append, '')
+        yield('..', '../' + url_append, '', _get_user(n), _get_group(n), _get_mode(n), _get_time(n))
     for sub in n:
         display = link = sub.name
 
@@ -61,7 +87,7 @@ def _compute_dir_contents(n, path, show_hidden=False):
         else:
             size = sub.size()
 
-        yield (display, link + url_append, size)
+        yield (display, link + url_append, size, _get_user(sub), _get_group(sub), _get_mode(sub), _get_time(sub))
 
 
 class BupRequestHandler(tornado.web.RequestHandler):
