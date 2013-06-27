@@ -51,6 +51,17 @@ def cache_get(top, path):
     return c
         
     
+def _time_nsec_to_fuseStat(ns):
+    # Actually, we want to do something like:
+    #
+    # return fuse.Timespec(tv_sec=int(int(ns) / 10**9), tv_nsec=int(ns) % 10**9)
+    #
+    # However, fuse-python (currently) does not support this, so we
+    # convert it to float (and loose precision thereby!!).
+    # Also, at the moment fuse-python ignores the fractional part and
+    # the value must not be negative :)
+    return ns / 1000000000.0 if ns > 0 else 0;
+
 
 class BupFs(fuse.Fuse):
     def __init__(self, top, use_metadata=False):
@@ -66,9 +77,14 @@ class BupFs(fuse.Fuse):
             st.st_mode = node.mode
             st.st_nlink = node.nlinks()
             st.st_size = node.size()
-            st.st_mtime = node.mtime
-            st.st_ctime = node.ctime
-            st.st_atime = node.atime
+            if self._use_metadata:
+                st.st_mtime = _time_nsec_to_fuseStat(node.mtime_nsec_meta_default())
+                st.st_ctime = _time_nsec_to_fuseStat(node.ctime_nsec_meta_default())
+                st.st_atime = _time_nsec_to_fuseStat(node.atime_nsec_meta_default())
+            else:
+                st.st_mtime = _time_nsec_to_fuseStat(node.mtime_nsec_default())
+                st.st_ctime = _time_nsec_to_fuseStat(node.ctime_nsec_default())
+                st.st_atime = _time_nsec_to_fuseStat(node.atime_nsec_default())
             return st
         except vfs.NoSuchFile:
             return -errno.ENOENT
