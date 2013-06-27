@@ -278,7 +278,6 @@ class Node:
         self.hash = hash
         self.atime_nsec = self.ctime_nsec = self.mtime_nsec = None
         self._subs = None
-        self._metadata = None
 
 
     def _get_atime_nsec_meta(self):
@@ -615,12 +614,15 @@ class Node:
 
     def _populate_metadata(self):
         # Only Dirs contain .bupm files, so by default, do nothing.
-        pass
+        self._metadata = None
 
     def metadata(self):
         """Return this Node's Metadata() object, if any."""
-        if self.parent:
-            self.parent._populate_metadata()
+        if not hasattr(self, "_metadata"):
+            if self.parent:
+                self.parent._populate_metadata()
+            if not hasattr(self, "_metadata"):
+                self._metadata = None
         return self._metadata
 
 
@@ -718,6 +720,7 @@ class Dir(Node):
         if not self._subs:
             self._mksubs()
         if not self._bupm:
+            self._metadata = None
             return
         meta_stream = self._bupm.open()
         self._metadata = metadata.Metadata.read(meta_stream)
@@ -751,7 +754,8 @@ class Dir(Node):
 
     def metadata(self):
         """Return this Dir's Metadata() object, if any."""
-        self._populate_metadata()
+        if not hasattr(self, "_metadata"):
+            self._populate_metadata()
         return self._metadata
 
     def metadata_file(self):
