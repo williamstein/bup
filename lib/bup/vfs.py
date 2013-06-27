@@ -39,6 +39,113 @@ class TooManySymlinks(NodeError):
     pass
 
 
+class InodeCache:
+    """A class containing dictionaries to register and track the inodes for Nodes."""
+    def __init__(self):
+        # we start the idCount with 4 because to ids below are reserved:
+        # 1 = parent mount directory
+        # 2 = (first) RefList node
+        # 3 = (first) CommitDir node
+        # 4 = (first) TagDir node
+        self._idCount = 4
+        self._key_lookup = {}
+        self._inode_lookup = { 1: 1 } # the inode #1 is reserved for the parent mount directory
+    def _get_new_inode(self):
+        while True:
+            # search for a not yet used inode...
+            self._idCount += 1
+            if self._idCount not in self._inode_lookup:
+                return self._idCount
+    def get_inode_for_node(self, node):
+        """
+        Returns the inode for the given node. The inode is cached inside of
+        node as node._inode. If no value is cached yet, a new one will
+        be assigned and the node will be remembered.
+        """
+        inode = getattr(node, "_inode", None)
+        if inode is not None:
+            return inode
+        hardlink_target = node.hardlink_target
+        if hardlink_target is None:
+            # nodes without hardlink_target get their individual inode
+            inode = self._get_new_inode()
+            self._inode_lookup[inode] = 1
+            node._inode = inode
+            return inode
+
+        # do we want to share the inode between different snapshots???
+        # Adjust the key accordingly.
+        #
+        #key = hardlink_target
+        key = (node.commit_id(), hardlink_target)
+
+        entry = self._key_lookup.get(key, None)
+        if entry is None:
+            # such a commit_id/hardlink_target pair is not yet seen. Create
+            # a new inode.
+            inode = self._get_new_inode()
+            nlink = 1
+            entry = (node, nlink)
+        else:
+            inode = None
+            if isinstance(entry, tuple):
+                # this is (by far) the normal case: the entry is a tuple.
+                if node.same_content(entry[0]):
+                    # as expected: we can share the inode because the nodes have
+                    # the same content.
+                    inode = entry[0]._inode
+                    nlink = entry[1] + 1
+                    entry = (entry[0], nlink)
+                else:
+                    # unexpected case: the hardlink_target for the nodes is the
+                    # same, but their data/metadata is not. So, we change the
+                    # entry to be a list of tuples. Below, a new inode gets assigned.
+                    entry = [ entry ]
+            else:
+                # we search over the listed entries for this inode for a
+                # matching node.
+                for i,ientry in enumerate(entry):
+                    node_i = ientry[0]
+                    if node.same_content(node_i):
+                        # the current entry has a matching node.
+                        # increase the nlink count and use this inode.
+                        inode = node_i._inode
+                        nlink = ientry[1] + 1
+                        entry[i] = (node_i, nlink)
+                        break
+            if inode is None:
+                # The current node has the same hardlink_target as other nodes
+                # but different data/metadata. This is actually an inconsistency
+                # within the repository, which might happen, if the file system was
+                # modified while making the backup.
+                # In this case, we create a new inode for the node and append it to the entries list.
+                inode = self._get_new_inode()
+                nlink = 1
+                entry.append( (node, nlink) )
+        self._key_lookup[key] = entry
+        self._inode_lookup[inode] = nlink
+        node._inode = inode
+        return inode
+    def get_nlinks(self, node):
+        """Return the link count for a give inode."""
+        # The _inode_lookup dictionary will have an entry node.inode, because within the property
+        # getter "inode" the value will be created (if it does not yet exist).
+        return self._inode_lookup[node.inode]
+    def try_set_inode_for_node(self, node, inode):
+        """
+        Try to set the inode to a certain value. If the node already has an
+        inode or the inode is already registered, this method does nothing.
+        The reason is that we don't want to use duplicate inodes, nor changing
+        the inode of a node after setting it once.
+        """
+        if hasattr(node, "_inode") or inode in self._inode_lookup:
+            return False
+        self._inode_lookup[inode] = 1
+        node._inode = inode
+        return True
+_inodeCache = InodeCache()
+
+
 def _treeget(hash):
     it = cp().get(hash.encode('hex'))
     type = it.next()
@@ -317,6 +424,14 @@ class Node:
         return getgid()
 
 
+    def commit_id(self):
+        """Returns the id of the commit to which the current node belongs, or None otherwise"""
+        while self:
+            if hasattr(self, '_commit_id'):
+                return self._commit_id
+            self = self.parent
+
+
     def __repr__(self):
         return "<%s object at X - name:%r hash:%s parent:%r>" \
             % (self.__class__, self.name, self.hash.encode('hex'),
@@ -327,6 +442,18 @@ class Node:
             return 0
         return (cmp(a and a.parent, b and b.parent) or
                 cmp(a and a.name, b and b.name))
+
+    def same_content(self, other):
+        """Returns true, if self and the other node have the same content, type and metadata."""
+        if self is other:
+            return True
+        if type(self) is not type(other):
+            return False
+        if self.mode != other.mode or self.hash != other.hash:
+            return False
+        a_meta = self.metadata()
+        b_meta = other.metadata()
+        return a_meta is b_meta or (a_meta is not None and b_meta is not None and a_meta.same_file(b_meta))
 
     def __iter__(self):
         return iter(self.subs())
@@ -428,11 +555,55 @@ class Node:
             pass
         return n
 
-    def nlinks(self):
-        """Get the number of hard links to the current node."""
+    def _get_hardlink_target(self):
+        metadata = self.metadata()
+        return getattr(metadata, 'hardlink_target', None) if metadata is not None else None
+    hardlink_target = property(_get_hardlink_target)
+
+    inode = property(_inodeCache.get_inode_for_node)
+    def _try_set_inode(self, inode):
+        """
+        Try to set the inode to a certain value. If the node already has an
+        inode or the inode is already registred, this method does nothing.
+        We don't want to use duplicate inodes, nor changing the inode of a node.
+        """
+        return _inodeCache.try_set_inode_for_node(self, inode)
+
+    def _get_inode_of_parent(self):
+        """
+        Get the inode of the parent node or 1 if there is no parent. The 1 is on purpose, because it
+        indicates the inode for the parent directory of the fuse mount point.
+        """
+        parent = self.parent
+        return parent.inode if parent is not None else 1
+    inode_of_parent = property(_get_inode_of_parent)
+
+    def nlinks(self, use_inode_cache=False):
+        """
+        Get the number of hard links to the current node.
+
+        For directories, this is the number of subdirectories in the directory + 2.
+
+        For other nodes it is 1 (if use_inode_cache is False). When use_inode_cache is
+        True, the inode is used to lookup the link count. This means, that the
+        metadata will be accessed. Actually, the number returned in this case will
+        only be correct, if every other instance of the file was already visited, because the
+        nlinks are only counted, as we encounter the same file. The reason is that
+        before we did not encounter all instances, we don't know that they even exist.
+        """
         if self._subs == None:
             self._mksubs()
-        return 1
+        if stat.S_ISDIR(self.mode):
+            return 2 + sum( 1 for item in self if stat.S_ISDIR(item.mode) )
+
+        if not use_inode_cache:
+            return 1
+
+        # This approach has the problem, that it will only report
+        # the proper link count for all equal nodes that were already visited.
+        # IOW, for this to be correct, you have to visit very node once
+        # and then visit your node again.
+        return _inodeCache.get_nlinks(self)
 
     def size(self):
         """Get the size of the current node."""
@@ -636,6 +807,7 @@ class CommitList(Node):
         for (name, (hash, date)) in self.commits.items():
             n1 = Dir(self, name, GIT_MODE_TREE, hash)
             n1._set_time_nsec_from_git_date(date)
+            n1._commit_id = hash
             self._subs[name] = n1
 
 
@@ -706,15 +878,18 @@ class RefList(Node):
     """
     def __init__(self, parent):
         Node.__init__(self, parent, '/', GIT_MODE_TREE, EMPTY_SHA)
+        self._try_set_inode(2)
 
     def _mksubs(self):
         self._subs = {}
 
         commit_dir = CommitDir(self, '.commit')
         self._subs['.commit'] = commit_dir
+        commit_dir._try_set_inode(3)
 
         tag_dir = TagDir(self, '.tag')
         self._subs['.tag'] = tag_dir
+        tag_dir._try_set_inode(4)
 
         for (name,sha) in git.list_refs():
             if name.startswith('refs/heads/'):
