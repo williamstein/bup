@@ -74,14 +74,15 @@ class BupFs(fuse.Fuse):
         try:
             node = cache_get(self.top, path)
             st = Stat()
-            st.st_mode = node.mode
             st.st_nlink = node.nlinks()
             st.st_size = node.size()
             if self._use_metadata:
+                st.st_mode = node.mode_meta_default()
                 st.st_mtime = _time_nsec_to_fuseStat(node.mtime_nsec_meta_default())
                 st.st_ctime = _time_nsec_to_fuseStat(node.ctime_nsec_meta_default())
                 st.st_atime = _time_nsec_to_fuseStat(node.atime_nsec_meta_default())
             else:
+                st.st_mode = node.mode
                 st.st_mtime = _time_nsec_to_fuseStat(node.mtime_nsec_default())
                 st.st_ctime = _time_nsec_to_fuseStat(node.ctime_nsec_default())
                 st.st_atime = _time_nsec_to_fuseStat(node.atime_nsec_default())
