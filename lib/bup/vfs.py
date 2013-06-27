@@ -169,9 +169,66 @@ class Node:
         self.name = name
         self.mode = mode
         self.hash = hash
-        self.ctime = self.mtime = self.atime = 0
+        self.atime_nsec = self.ctime_nsec = self.mtime_nsec = None
         self._subs = None
         self._metadata = None
+
+
+    def _get_atime_nsec_meta(self):
+        """Return the atime in nano seconds from the metadata or None if it is missing"""
+        metadata = self.metadata()
+        if metadata is not None:
+            return getattr(metadata, 'atime', None)
+    atime_nsec_meta = property(_get_atime_nsec_meta)
+    atime = property(lambda self: self.atime_nsec / 1000000000.0 if self.atime_nsec is not None else None)
+    def atime_nsec_meta_default(self, default=0, use_atime_nsec=True):
+        """Return the atime in nano seconds from the metadata. If the metadata is missing, take the value from atime_nsec (if use_atime_nsec) or return default."""
+        time = self._get_atime_nsec_meta()
+        if time is not None:
+            return time
+        return self.atime_nsec if use_atime_nsec and self.atime_nsec is not None else default
+    def atime_nsec_default(self, default=0):
+        """Return the nodes atime_nsec or a default if the value is missing (does not use metadata) """
+        return self.atime_nsec if self.atime_nsec is not None else default
+
+    def _get_ctime_nsec_meta(self):
+        """Return the ctime in nano seconds from the metadata or None if it is missing"""
+        metadata = self.metadata()
+        if metadata is not None:
+            return getattr(metadata, 'ctime', None)
+    ctime_nsec_meta = property(_get_ctime_nsec_meta)
+    ctime = property(lambda self: self.ctime_nsec / 1000000000.0 if self.ctime_nsec is not None else None)
+    def ctime_nsec_meta_default(self, default=0, use_ctime_nsec=True):
+        """Return the ctime in nano seconds from the metadata. If the metadata is missing, take the value from ctime_nsec (if use_ctime_nsec) or return default."""
+        time = self._get_ctime_nsec_meta()
+        if time is not None:
+            return time
+        return self.ctime_nsec if use_ctime_nsec and self.ctime_nsec is not None else default
+    def ctime_nsec_default(self, default=0):
+        """Return the nodes ctime_nsec or a default if the value is missing (does not use metadata) """
+        return self.ctime_nsec if self.ctime_nsec is not None else default
+
+    def _get_mtime_nsec_meta(self):
+        """Return the mtime in nano seconds from the metadata or None if it is missing"""
+        metadata = self.metadata()
+        if metadata is not None:
+            return getattr(metadata, 'mtime', None)
+    mtime_nsec_meta = property(_get_mtime_nsec_meta)
+    mtime = property(lambda self: self.mtime_nsec / 1000000000.0 if self.mtime_nsec is not None else None)
+    def mtime_nsec_meta_default(self, default=0, use_mtime_nsec=True):
+        """Return the mtime in nano seconds from the metadata. If the metadata is missing, take the value from mtime_nsec (if use_mtime_nsec) or return default."""
+        time = self._get_mtime_nsec_meta()
+        if time is not None:
+            return time
+        return self.mtime_nsec if use_mtime_nsec and self.mtime_nsec is not None else default
+    def mtime_nsec_default(self, default=0):
+        """Return the nodes mtime_nsec or a default if the value is missing (does not use metadata) """
+        return self.mtime_nsec if self.mtime_nsec is not None else default
+
+    def _set_time_nsec_from_git_date(self, date):
+        """Set the [acm]time_nsec values to the given date (date is in seconds)"""
+        self.atime_nsec = self.ctime_nsec = self.mtime_nsec = date * 1000000000
+
 
     def __repr__(self):
         return "<%s object at X - name:%r hash:%s parent:%r>" \
@@ -491,7 +548,7 @@ class CommitList(Node):
         self._subs = {}
         for (name, (hash, date)) in self.commits.items():
             n1 = Dir(self, name, GIT_MODE_TREE, hash)
-            n1.ctime = n1.mtime = date
+            n1._set_time_nsec_from_git_date(date)
             self._subs[name] = n1
 
 
@@ -509,7 +566,7 @@ class TagDir(Node):
                 commithex = sha.encode('hex')
                 target = '../.commit/%s/%s' % (commithex[:2], commithex[2:])
                 tag1 = FakeSymlink(self, name, target)
-                tag1.ctime = tag1.mtime = date
+                tag1._set_time_nsec_from_git_date(date)
                 self._subs[name] = tag1
 
 
@@ -535,19 +592,19 @@ class BranchList(Node):
             commithex = commit.encode('hex')
             target = '../.commit/%s/%s' % (commithex[:2], commithex[2:])
             n1 = FakeSymlink(self, ls, target)
-            n1.ctime = n1.mtime = date
+            n1._set_time_nsec_from_git_date(date)
             self._subs[ls] = n1
 
             for tag in tags.get(commit, []):
                 t1 = FakeSymlink(self, tag, target)
-                t1.ctime = t1.mtime = date
+                t1._set_time_nsec_from_git_date(date)
                 self._subs[tag] = t1
 
         (date, commit) = latest
         commithex = commit.encode('hex')
         target = '../.commit/%s/%s' % (commithex[:2], commithex[2:])
         n1 = FakeSymlink(self, 'latest', target)
-        n1.ctime = n1.mtime = date
+        n1._set_time_nsec_from_git_date(date)
         self._subs['latest'] = n1
 
 
@@ -577,5 +634,5 @@ class RefList(Node):
                 name = name[11:]
                 date = git.rev_get_date(sha.encode('hex'))
                 n1 = BranchList(self, name, sha)
-                n1.ctime = n1.mtime = date
+                n1._set_time_nsec_from_git_date(date)
                 self._subs[name] = n1
