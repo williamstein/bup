@@ -471,13 +471,13 @@ class Node:
 
     def subs(self):
         """Get a list of nodes that are contained in this node."""
-        if self._subs == None:
+        if self._subs is None:
             self._mksubs()
         return sorted(self._subs.values())
 
     def sub(self, name):
         """Get node named 'name' that is contained in this node."""
-        if self._subs == None:
+        if self._subs is None:
             self._mksubs()
         ret = self._subs.get(name)
         if not ret:
@@ -590,7 +590,7 @@ class Node:
         nlinks are only counted, as we encounter the same file. The reason is that
         before we did not encounter all instances, we don't know that they even exist.
         """
-        if self._subs == None:
+        if self._subs is None:
             self._mksubs()
         if hasattr(self, '_nlinks_for_dir'):
             #assert( self._nlinks_for_dir == 2 + sum( 1 for item in self if stat.S_ISDIR(item.mode) ) )
@@ -720,7 +720,7 @@ class Dir(Node):
         self._bupm = None
 
     def _populate_metadata(self):
-        if not self._subs:
+        if self._subs is None:
             self._mksubs()
         if not self._bupm:
             self._metadata = None
