@@ -694,10 +694,16 @@ def _gitenv():
     os.environ['GIT_DIR'] = os.path.abspath(repo())
 
 
+# We cache this since it gets called multiple times in one invocation of various bup commands, and
+# takes a significant amount of time.
+_list_refs = None
 def list_refs(refname = None):
     """Generate a list of tuples in the form (refname,hash).
     If a ref name is specified, list only this particular ref.
     """
+    global _list_refs
+    if refname is None and _list_refs is not None:
+        return _list_refs
     argv = ['git', 'show-ref', '--']
     if refname:
         argv += [refname]
@@ -707,9 +713,12 @@ def list_refs(refname = None):
     if rv:
         assert(not out)
     if out:
+        z = []
         for d in out.split('\n'):
             (sha, name) = d.split(' ', 1)
-            yield (name, sha.decode('hex'))
+            z.append((name, sha.decode('hex')))
+        _list_refs = z
+        return z
 
 
 def read_ref(refname):
