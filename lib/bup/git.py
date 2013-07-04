@@ -719,7 +719,8 @@ def list_refs(refname = None):
             z.append((name, sha.decode('hex')))
         _list_refs = z
         return z
-
+    else:                                                                                                                              
+        return []
 
 def read_ref(refname):
     """Get the commit id of the most recent commit made on a given ref."""
@@ -782,9 +783,6 @@ def rev_list(ref, count=None):
         return v
     else:
         return v[:count]
-
-    return v
-
 
 def rev_get_date(ref):
     """Get the date of the latest commit on the specified ref."""
