@@ -698,10 +698,16 @@ def _gitenv():
     os.environ['GIT_DIR'] = os.path.abspath(repo())
 
 
+# We cache this since it gets called multiple times in one invocation of various bup commands, and
+# takes a significant amount of time.
+_list_refs = None
 def list_refs(refname = None):
     """Generate a list of tuples in the form (refname,hash).
     If a ref name is specified, list only this particular ref.
     """
+    global _list_refs
+    if refname is None and _list_refs is not None:
+        return _list_refs
     argv = ['git', 'show-ref', '--']
     if refname:
         argv += [refname]
@@ -711,10 +717,14 @@ def list_refs(refname = None):
     if rv:
         assert(not out)
     if out:
+        z = []
         for d in out.split('\n'):
             (sha, name) = d.split(' ', 1)
-            yield (name, sha.decode('hex'))
-
+            z.append((name, sha.decode('hex')))
+        _list_refs = z
+        return z
+    else:                                                                                                                              
+        return []
 
 def read_ref(refname):
     """Get the commit id of the most recent commit made on a given ref."""
@@ -724,6 +734,7 @@ def read_ref(refname):
         return l[0][1]
     else:
         return None
+
 
 
 def rev_list(ref, count=None):
@@ -736,24 +747,46 @@ def rev_list(ref, count=None):
     If count is a non-zero integer, limit the number of commits to "count"
     objects.
     """
+    # We cache rev_list on disk because each call to rev_list involves a
+    # subprocess call to git, which takes a fraction of a second, and these
+    # add up to bup being *unusable* if there are thousands of branches.
+    # For some reason (?) bup calls rev_list on startup for *every*
+    # single branch in the repository before doing "bup ls",
+    # "bup restore", etc.
+    # Cache the git rev-list in a new directory called bubcache.
+    REV_CACHE = os.path.join(repodir, 'bupcache', 'rev_list')
+    if not os.path.exists(REV_CACHE):
+        os.makedirs(REV_CACHE)
+    import cPickle
+    cache = os.path.join(REV_CACHE, ref)
+    if os.path.exists(cache):
+        v = cPickle.loads(open(cache).read())
+        if count is None:
+            return v
+        else:
+            return v[:count]
+
     assert(not ref.startswith('-'))
-    opts = []
-    if count:
-        opts += ['-n', str(atoi(count))]
-    argv = ['git', 'rev-list', '--pretty=format:%ct'] + opts + [ref, '--']
+    argv = ['git', 'rev-list', '--pretty=format:%ct'] + [ref, '--']
     p = subprocess.Popen(argv, preexec_fn = _gitenv, stdout = subprocess.PIPE)
     commit = None
+    v = []
     for row in p.stdout:
         s = row.strip()
         if s.startswith('commit '):
             commit = s[7:].decode('hex')
         else:
             date = int(s)
-            yield (date, commit)
+            v.append((date, commit))
     rv = p.wait()  # not fatal
     if rv:
         raise GitError, 'git rev-list returned error %d' % rv
+    open(cache,'wb').write(cPickle.dumps(v))
 
+    if count is None:
+        return v
+    else:
+        return v[:count]
 
 def rev_get_date(ref):
     """Get the date of the latest commit on the specified ref."""
