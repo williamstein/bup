@@ -103,7 +103,7 @@ class Level:
         (ofs,n) = (f.tell(), len(self.list))
         if self.list:
             count = len(self.list)
-            #log('popping %r with %d entries\n' 
+            #log('popping %r with %d entries\n'
             #    % (''.join(self.ename), count))
             for e in self.list:
                 e.write(f)
@@ -199,7 +199,7 @@ class Entry:
               or self.sha == EMPTY_SHA or not self.gitmode:
             self.invalidate()
         self._fixup()
-        
+
     def _fixup(self):
         if self.uid < 0:
             self.uid += 0x100000000
@@ -346,7 +346,7 @@ class ExistingEntry(Entry):
 
     def __iter__(self):
         return self.iter()
-            
+
 
 class Reader:
     def __init__(self, filename):
@@ -486,7 +486,7 @@ class Writer:
 
     def _add(self, ename, entry):
         if self.lastfile and self.lastfile <= ename:
-            raise Error('%r must come before %r' 
+            raise Error('%r must come before %r'
                              % (''.join(e.name), ''.join(self.lastfile)))
             self.lastfile = e.name
         self.level = _golevel(self.level, self.f, ename, entry,
@@ -542,13 +542,17 @@ def reduce_paths(paths):
                 p = slashappend(p)
             xpaths.append((rp, p))
         except OSError, e:
-            add_error('reduce_paths: %s' % e)
+            # William Stein -- ignore this special error that comes up when a fuse-mounted sshfs
+            # filesystem is mounted but becomes stale.   Ignoring this error doesn't negatively
+            # impact other things we want to backup properly.
+            if 'Transport endpoint is not connected' not in str(e):
+                add_error('reduce_paths: %s' % e)
     xpaths.sort()
 
     paths = []
     prev = None
     for (rp, p) in xpaths:
-        if prev and (prev == rp 
+        if prev and (prev == rp
                      or (prev.endswith('/') and rp.startswith(prev))):
             continue # already superceded by previous path
         paths.append((rp, p))
