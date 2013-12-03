@@ -80,7 +80,7 @@ def progress(s):
 
 def qprogress(s):
     """Calls progress() only if we haven't printed progress in a while.
-    
+
     This avoids overloading the stderr buffer with excess junk.
     """
     global _last_prog
@@ -666,6 +666,11 @@ def add_error(e):
     Once processing is able to stop and output the errors, the saved errors are
     accessible in the module variable helpers.saved_errors.
     """
+    if 'Transport endpoint is not connected' in str(e):
+        # Ignore this special error that comes up when a fuse-mounted sshfs
+        # filesystem is mounted but becomes stale.   Ignoring this error doesn't negatively
+        # impact other things we want to backup properly. - William stein
+        return
     saved_errors.append(e)
     log('%-70s\n' % e)
 

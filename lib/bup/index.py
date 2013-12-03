@@ -542,11 +542,7 @@ def reduce_paths(paths):
                 p = slashappend(p)
             xpaths.append((rp, p))
         except OSError, e:
-            # William Stein -- ignore this special error that comes up when a fuse-mounted sshfs
-            # filesystem is mounted but becomes stale.   Ignoring this error doesn't negatively
-            # impact other things we want to backup properly.
-            if 'Transport endpoint is not connected' not in str(e):
-                add_error('reduce_paths: %s' % e)
+            add_error('reduce_paths: %s' % e)
     xpaths.sort()
 
     paths = []
